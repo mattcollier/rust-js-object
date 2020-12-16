@@ -1,0 +1,102 @@
+<html>
+  <head>
+    <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
+    <script src="uuid-random.min.js"></script>
+  </head>
+  <body>
+    <!-- Note the usage of `type=module` here as this is an ES6 module -->
+    <script type="module">
+      // Use ES module import syntax to import functionality from the module
+      // that we have compiled.
+      //
+      // Note that the `default` import is an initialization function which
+      // will "boot" the module and make it ready to use. Currently browsers
+      // don't support natively imported WebAssembly as an ES module, but
+      // eventually the manual initialization won't be required!
+      import init, { add } from './pkg/wasm_test.js';
+
+      async function run() {
+        // First up we need to actually load the wasm file, so we use the
+        // default export to inform it where the wasm file is located on the
+        // server, and then we wait on the returned promise to wait for the
+        // wasm to be loaded.
+        //
+        // It may look like this: `await init('./pkg/without_a_bundler_bg.wasm');`,
+        // but there is also a handy default inside `init` function, which uses
+        // `import.meta` to locate the wasm file relatively to js file.
+        //
+        // Note that instead of a string you can also pass in any of the
+        // following things:
+        //
+        // * `WebAssembly.Module`
+        //
+        // * `ArrayBuffer`
+        //
+        // * `Response`
+        //
+        // * `Promise` which returns any of the above, e.g. `fetch("./path/to/wasm")`
+        //
+        // This gives you complete control over how the module is loaded
+        // and compiled.
+        //
+        // Also note that the promise, when resolved, yields the wasm module's
+        // exports which is the same as importing the `*_bg` module in other
+        // modes
+        await init();
+
+        // And afterwards we can use all the functionality defined in wasm
+        const y = new Map();
+
+        // y.set('a', 'b');
+        // y.set('apple', "bird");
+        // y.set('myobject', new Map([['a', 'apple']]));
+        // y.set('myobject2', new Map([['b', 'bird']]));
+        // y.set('myobject3', new Map([['c', 'cat']]));
+
+        for(let i = 0; i < 1000000; ++i) {
+          y.set(`b0${i}`, new Map([[uuid(), uuid()]]));
+          // y.set(uuid(), new Map([[uuid(), uuid()]]));
+        }
+
+        // copy the map
+        const x = new Map(y);
+
+        const wasmTimer = _getTimer();
+        let result = add(y);
+        console.log(`WASM Total ${result} Elapsed ${wasmTimer.elapsed()}`);
+
+        const jsTimer = _getTimer();
+        result = _add(y);
+        console.log(`JS Total ${result} Elapsed ${jsTimer.elapsed()}`);
+
+      }
+
+      run();
+
+      function _add(map) {
+        let previous = new Map();
+        let counter = 0;
+        for (const [key, value] of map) {
+          if(key.includes('b0')) {
+            counter++
+            value.set('previous', previous);
+          }
+          previous = value;
+        }
+
+        return counter;
+      }
+
+      function _getTimer() {
+        const time = performance.now();
+
+        return {
+          elapsed() {
+            const stopTime = performance.now();
+            return stopTime - time;
+          }
+        };
+      }
+    </script>
+  </body>
+</html>
